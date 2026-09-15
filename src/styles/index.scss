@@ -1,0 +1,101 @@
+/**
+ * 全局样式与设计令牌
+ * 品牌基调：石油工程的「深海蓝 + 能源橙」
+ */
+:root {
+  /* 品牌深蓝 —— 主色阶 */
+  --xy-navy-900: #071c33;
+  --xy-navy-800: #0a2540;
+  --xy-navy-700: #0f3358;
+  --xy-navy-600: #123a63;
+  --xy-navy-500: #1b5299;
+  --xy-navy-400: #2a6fbf;
+  --xy-navy-300: #5c96d6;
+  --xy-navy-100: #e8f0fa;
+
+  /* 能源橙 —— 强调色（极克制使用） */
+  --xy-amber-600: #e08200;
+  --xy-amber-500: #ff9f1c;
+  --xy-amber-400: #ffb547;
+  --xy-amber-100: #fff4e3;
+
+  /* 中性色 */
+  --xy-text-1: #1d2129;
+  --xy-text-2: #4e5969;
+  --xy-text-3: #86909c;
+  --xy-text-4: #c9cdd4;
+  --xy-border: #e5e6eb;
+  --xy-fill-1: #f7f8fa;
+  --xy-fill-2: #f2f3f5;
+
+  /* 语义色 */
+  --xy-success: #00b42a;
+  --xy-warning: #ff7d00;
+  --xy-danger: #f53f3f;
+
+  /* 圆角与阴影 */
+  --xy-radius-sm: 6px;
+  --xy-radius: 10px;
+  --xy-radius-lg: 16px;
+  --xy-shadow-card: 0 12px 40px rgba(7, 28, 51, 0.12);
+  --xy-shadow-btn: 0 6px 18px rgba(27, 82, 153, 0.28);
+
+  /* Element Plus 主题覆盖 */
+  --el-color-primary: #1b5299;
+  --el-color-primary-light-3: #2a6fbf;
+  --el-color-primary-light-5: #5c96d6;
+  --el-color-primary-light-7: #a8c6e6;
+  --el-color-primary-light-8: #c9dcf0;
+  --el-color-primary-light-9: #e8f0fa;
+  --el-color-primary-dark-2: #0f3358;
+  --el-border-radius-base: 8px;
+  --el-font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--el-font-family);
+  color: var(--xy-text-1);
+  background: var(--xy-fill-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--xy-navy-500);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--xy-navy-400);
+  }
+}
+
+/* 滚动条（国产浏览器多为 Chromium 内核，兼容良好） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--xy-text-4);
+  border-radius: 4px;
+
+  &:hover {
+    background: var(--xy-text-3);
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
