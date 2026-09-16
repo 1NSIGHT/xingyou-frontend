@@ -12,12 +12,15 @@ import { ElMessage } from 'element-plus'
 import FormRenderer from '@/components/schema/FormRenderer.vue'
 import { getPublishedFormApi, saveDocumentApi } from '@/api/meta'
 import { useAuthStore } from '@/stores/auth'
-import type { FormSchema } from '@/schema'
+import { useRoute } from 'vue-router'
+import { resolveI18n, type FormSchema } from '@/schema'
 
 const auth = useAuthStore()
 
-/** 当前演示的表单。正式形态由菜单/路由参数传入 */
-const FORM_KEY = 'ncr'
+const route = useRoute()
+/** ★ 表单标识来自**路由参数**，不再是代码里的常量。
+ *   加一张表单只需要在设计器里发布它 —— 列表里会出现，点进来就是这里。 */
+const FORM_KEY = String(route.params.formKey ?? '')
 /** 演示用的流程节点。正式形态由待办带入（"我现在处理的是哪个环节"） */
 const NODE_KEY = 'start'
 
@@ -36,6 +39,10 @@ const projectId = computed(() => {
 })
 
 onMounted(async () => {
+  if (!FORM_KEY) {
+    ElMessage.error('缺少表单标识')
+    return
+  }
   loading.value = true
   try {
     const published = await getPublishedFormApi(FORM_KEY)
@@ -98,7 +105,7 @@ async function submit() {
     <el-card shadow="never">
       <template #header>
         <div class="xy-header">
-          <span>不符合项填报</span>
+          <span>{{ schema?.name ? resolveI18n(schema.name, "zh-CN") : FORM_KEY }}</span>
           <el-tag v-if="version" type="info" size="small">表单版本 v{{ version }}</el-tag>
           <el-tag type="warning" size="small">当前节点：{{ NODE_KEY }}</el-tag>
         </div>

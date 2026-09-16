@@ -64,3 +64,21 @@ export function getDictItemsApi(codes: string[]) {
     paramsSerializer: { indexes: null },
   })
 }
+
+/** 已发布表单清单，与后端 FormSummary 对应 */
+export interface FormSummary {
+  formKey: string
+  name: string | null
+  version: number
+  category: string | null
+}
+
+/**
+ * 已发布表单清单 —— **填报入口的数据来源**。
+ *
+ * ★ 它是"平台"与"定制页面"的分界线：没有它，前端只能把 formKey 写死在代码里，
+ *   于是"加一张表单"变成"改一次代码 + 发一次版"，而那正是低代码要消灭的东西。
+ */
+export function listFormsApi() {
+  return request<FormSummary[]>({ url: '/meta/form', method: 'get' })
+}

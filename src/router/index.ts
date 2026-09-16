@@ -22,17 +22,23 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台' },
       },
       {
-        // 低代码填报页。★ 这个页面不认识任何具体业务 ——
-        // 它只是"取一份已发布的 schema，画出来，提交回去"，
-        // 因此后续每加一张表单都不需要新增路由。
+        // 低代码填报。★ 这里**没有写死任何表单标识** ——
+        // 清单从后端 meta_form 查，:formKey 由用户点击带入。
+        // 在设计器里发布一张新表单，它会自动出现在清单里，不动这个文件。
         path: 'document',
         meta: { title: '单据填报' },
         children: [
           {
-            path: 'ncr',
-            name: 'NcrDocument',
+            path: '',
+            name: 'DocumentList',
+            component: () => import('@/views/meta/document/list.vue'),
+            meta: { title: '单据填报' },
+          },
+          {
+            path: ':formKey',
+            name: 'DocumentFill',
             component: () => import('@/views/meta/document/index.vue'),
-            meta: { title: '不符合项填报' },
+            meta: { title: '填写单据' },
           },
         ],
       },
