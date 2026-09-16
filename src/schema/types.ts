@@ -65,6 +65,7 @@ export type FieldCategory =
   | 'CHOICE'
   | 'ATTACHMENT'
   | 'PERSON'
+  | 'ORG'
   | 'LAYOUT'
   | 'INDUSTRY'
 
@@ -86,6 +87,7 @@ export type FieldType =
   | 'image'
   | 'signature'
   | 'userPicker'
+  | 'orgPicker'
   | 'divider'
   | 'section'
   | 'weldJoint'
@@ -163,7 +165,7 @@ export interface ValidationRule {
  *
  * 未注册的 kind 在发布时被拒绝（后端侧由 DataSourceResolver SPI 判定）。
  */
-export type KernelDataSourceKind = 'dict' | 'ledger' | 'form' | 'user' | 'cascade'
+export type KernelDataSourceKind = 'dict' | 'ledger' | 'form' | 'user' | 'org' | 'cascade'
 
 /** 静态字典 */
 export interface DictDataSource {
@@ -222,6 +224,21 @@ export interface UserDataSource {
   multiple?: boolean
 }
 
+/**
+ * 选组织（`orgPicker` 的选项来源）。
+ *
+ * 与 `user` 是**两个不同的取值域**：组织 id 与用户 id 会撞号，
+ * 混用一个 kind 会让「被检查单位」在数据上无法与「检查人」区分。
+ */
+export interface OrgDataSource {
+  kind: 'org'
+  /** 可选范围 */
+  orgScope: 'CURRENT_PROJECT' | 'TENANT'
+  /** 只列某几类组织，如 EXTERNAL（施工单位、业主） */
+  orgTypeFilter?: Array<'INTERNAL' | 'EXTERNAL'>
+  multiple?: boolean
+}
+
 /** GB 四级工程划分（项目级树，非租户级字典） */
 export interface GbDivisionSource {
   kind: 'gbDivision'
@@ -265,6 +282,7 @@ export type DataSource =
   | LedgerDataSource
   | FormDataSource
   | UserDataSource
+  | OrgDataSource
   | CascadeDataSource
   | ExtensionDataSource
 

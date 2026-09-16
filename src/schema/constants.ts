@@ -67,6 +67,11 @@ export const FIELD_TYPES: FieldTypeDef[] = [
   // ---------------------------------------------------------------- 人员
   { code: 'userPicker', label: '人员选择', category: 'PERSON', valueType: 'number', multipleValueType: 'array', indexableAllowed: true, dataSourceRequired: false, hasValue: true, firstBatch: true },
 
+  // ---------------------------------------------------------------- 组织
+  // 与 userPicker 同构；与「人员」分开是因为两者取值域不同（组织 id 与用户 id 会撞号），
+  // 且审批流的 ORG_ROLE 规则需要拿到组织本身才能解析出「该单位的项目负责人」
+  { code: 'orgPicker', label: '组织选择', category: 'ORG', valueType: 'number', multipleValueType: 'array', indexableAllowed: true, dataSourceRequired: false, hasValue: true, firstBatch: true },
+
   // ---------------------------------------------------------------- 布局
   { code: 'divider', label: '分割线', category: 'LAYOUT', valueType: 'none', indexableAllowed: false, dataSourceRequired: false, hasValue: false, firstBatch: true },
   { code: 'section', label: '分组', category: 'LAYOUT', valueType: 'none', indexableAllowed: false, dataSourceRequired: false, hasValue: false, firstBatch: true },
@@ -89,6 +94,7 @@ export const FIELD_CATEGORIES: Array<{ code: FieldCategory; label: string }> = [
   { code: 'CHOICE', label: '选择' },
   { code: 'ATTACHMENT', label: '附件' },
   { code: 'PERSON', label: '人员' },
+  { code: 'ORG', label: '组织' },
   { code: 'LAYOUT', label: '布局' },
   { code: 'INDUSTRY', label: '行业' },
 ]

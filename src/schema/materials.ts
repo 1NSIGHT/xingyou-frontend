@@ -125,11 +125,11 @@ export function materialsByCategory(): Array<{
   materials: MaterialDefinition[]
 }> {
   const order: FieldCategory[] = [
-    'BASIC', 'NUMBER', 'DATE', 'CHOICE', 'ATTACHMENT', 'PERSON', 'LAYOUT', 'INDUSTRY',
+    'BASIC', 'NUMBER', 'DATE', 'CHOICE', 'ATTACHMENT', 'PERSON', 'ORG', 'LAYOUT', 'INDUSTRY',
   ]
   const labels: Record<FieldCategory, string> = {
     BASIC: '基础', NUMBER: '数值', DATE: '日期', CHOICE: '选择',
-    ATTACHMENT: '附件', PERSON: '人员', LAYOUT: '布局', INDUSTRY: '行业',
+    ATTACHMENT: '附件', PERSON: '人员', ORG: '组织', LAYOUT: '布局', INDUSTRY: '行业',
   }
 
   return order
@@ -228,8 +228,23 @@ export function allDataSourceSelectors(): DataSourceSelectorDefinition[] {
  *
  * 非内核的 kind **必须**带命名空间（含 `:`），见规范 3.4.2。
  * 这个判断同时用于发布校验：既不是内核种类、又没注册解析器的 kind 会被拒绝。
+ *
+ * ★ 本清单与后端 `FormDataSource.KERNEL_KINDS` 必须一致，两份都以
+ * `field-types.catalog.json` 的 `kernelDataSourceKinds` 为准，
+ * 由 `scripts/check-field-types.mjs`（前端）与 `FieldTypeCatalogTest`（后端）
+ * 各自校验。**只改一边必然有一侧失败。**
+ *
+ * 为什么需要护栏：漂移的表现是"设计器里能配、发布时被后端拒绝"，
+ * 而错误信息只说 kind 不认识，很难联想到是两份清单不一致。
  */
-export const KERNEL_DATA_SOURCE_KINDS = ['dict', 'ledger', 'form', 'user', 'cascade'] as const
+export const KERNEL_DATA_SOURCE_KINDS = [
+  'dict',
+  'ledger',
+  'form',
+  'user',
+  'org',
+  'cascade',
+] as const
 
 export function isKernelDataSourceKind(kind: string): boolean {
   return (KERNEL_DATA_SOURCE_KINDS as readonly string[]).includes(kind)

@@ -158,6 +158,30 @@ if (catalogCategories.join(',') !== feCategorySet.join(',')) {
   )
 }
 
+// 内核 dataSource 种类
+//
+// 两份手写清单（后端 FormDataSource.KERNEL_KINDS、前端 materials.ts 的
+// KERNEL_DATA_SOURCE_KINDS）都以此为准。漂移的表现是"设计器里能配、
+// 发布时被后端拒绝"，而错误信息只说 kind 不认识。
+const materialsPath = path.join(frontendRoot, 'src', 'schema', 'materials.ts')
+const materialsSource = fs.readFileSync(materialsPath, 'utf8')
+const kindBlockMatch = materialsSource.match(
+  /KERNEL_DATA_SOURCE_KINDS\s*=\s*\[([\s\S]*?)\]\s*as const/,
+)
+if (!kindBlockMatch) {
+  problems.push('materials.ts 里找不到 KERNEL_DATA_SOURCE_KINDS 定义')
+} else if (!catalog.kernelDataSourceKinds) {
+  problems.push('后端目录缺少 kernelDataSourceKinds，无法校验 dataSource 种类')
+} else {
+  const feKinds = [...kindBlockMatch[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).sort()
+  const catalogKinds = [...catalog.kernelDataSourceKinds.kinds].sort()
+  if (feKinds.join(',') !== catalogKinds.join(',')) {
+    problems.push(
+      `内核 dataSource 种类不一致：后端目录=[${catalogKinds.join(',')}] 前端=[${feKinds.join(',')}]`,
+    )
+  }
+}
+
 // ---------------------------------------------------------------- 输出
 
 console.log(`后端目录：${path.relative(frontendRoot, catalogPath)}`)
