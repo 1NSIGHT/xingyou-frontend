@@ -104,21 +104,49 @@ function optionsOf(field: FieldDef): DictItemVO[] {
 }
 
 // ---------------------------------------------------------------- 字典预取
+/**
+ * 收集整张表单用到的所有 dictCode。
+ *
+ * ★ 必须覆盖三种位置，漏掉任何一种都会让对应的下拉框**空着**，
+ *   而用户只会觉得"这东西坏了"，不会想到是预取漏了：
+ *   1. 主表字段的 dataSource.dictCode（含 section 子字段）
+ *   2. **cascade 数据源**：字典藏在 levels[].source.dictCode 里
+ *   3. **子表列**的 dataSource.dictCode
+ */
+function collectDictCodes(): string[] {
+  const codes = new Set<string>()
+
+  const scan = (fields: FieldDef[] | undefined) => {
+    const walk = (list?: FieldDef[]) => {
+      for (const field of list ?? []) {
+        walk(field.children)
+        const ds = field.dataSource as
+          | { dictCode?: string; levels?: Array<{ source?: { dictCode?: string } }> }
+          | undefined
+        if (ds?.dictCode) codes.add(ds.dictCode)
+        for (const level of ds?.levels ?? []) {
+          if (level?.source?.dictCode) codes.add(level.source.dictCode)
+        }
+      }
+    }
+    walk(fields)
+  }
+
+  scan(props.schema?.fields)
+  for (const sub of props.schema?.subForms ?? []) scan(sub.columns)
+  return [...codes]
+}
+
 watch(
   () => props.schema?.formKey,
   async () => {
-    const codes = new Set<string>()
-    for (const field of allFields.value) {
-      const ds = field.dataSource as { dictCode?: string } | undefined
-      if (ds?.dictCode) codes.add(ds.dictCode)
-    }
-    if (codes.size > 0) {
-      try {
-        dicts.value = await getDictItemsApi([...codes])
-      } catch {
-        // 字典取不到不该让整个填报页白屏 —— 选择框会是空的，但其它字段仍可填
-        dicts.value = {}
-      }
+    const codes = collectDictCodes()
+    if (codes.length === 0) return
+    try {
+      dicts.value = await getDictItemsApi(codes)
+    } catch {
+      // 字典取不到不该让整个填报页白屏 —— 选择框会是空的，但其它字段仍可填
+      dicts.value = {}
     }
   },
   { immediate: true },
