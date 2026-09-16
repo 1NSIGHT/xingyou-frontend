@@ -37,6 +37,8 @@ export interface UserInfo {
   /** 当前默认项目 */
   projectName: string
   roles: string[]
+  /** 角色编码列表，用于功能权限判断（如 ADMIN）。与 roles 的区别：roles 是给人看的名称 */
+  roleCodes: string[]
   avatar?: string
 }
 
@@ -84,7 +86,8 @@ export async function getUserInfoApi(): Promise<UserInfo> {
       realName: '张建国',
       tenantName: '兴油工程监理有限公司',
       projectName: '西气东输四线管道工程（二标段）',
-      roles: ['总监理工程师'],
+      roles: ['系统管理员'],
+      roleCodes: ['ADMIN'],
       avatar: '',
     }
   }

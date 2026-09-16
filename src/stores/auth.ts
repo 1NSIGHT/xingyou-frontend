@@ -18,6 +18,17 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => Boolean(token.value))
   const displayName = computed(() => userInfo.value?.realName || userInfo.value?.username || '')
 
+  /** 角色编码列表 */
+  const roleCodes = computed<string[]>(() => userInfo.value?.roleCodes ?? [])
+
+  /**
+   * 是否系统管理员。
+   *
+   * <p>只用于「要不要显示入口、要不要放行路由」这类体验判断。
+   * <b>真正的权限边界在后端</b>（{@code @PreAuthorize}），前端判断绕过了也调不通接口。
+   */
+  const isAdmin = computed(() => roleCodes.value.includes('ADMIN'))
+
   function readCachedUserInfo(): UserInfo | null {
     try {
       const raw = localStorage.getItem(USER_INFO_KEY)
@@ -77,6 +88,8 @@ export const useAuthStore = defineStore('auth', () => {
     userInfo,
     isLoggedIn,
     displayName,
+    roleCodes,
+    isAdmin,
     login,
     logout,
     fetchUserInfo,
