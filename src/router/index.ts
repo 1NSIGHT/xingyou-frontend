@@ -41,6 +41,26 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },      {
+        // 流程设计器 —— 低代码平台的**第二个定义入口**。
+        // 表单定义回答"一张单据长什么样"，流程定义回答"它怎么流转"。
+        // 同样没有写死任何流程标识，:formKey 只是带过去绑定用。
+        path: 'flow',
+        meta: { title: '流程设计' },
+        children: [
+          {
+            path: '',
+            name: 'FlowDesignerNew',
+            component: () => import('@/views/meta/flow/designer.vue'),
+            meta: { title: '新建流程' },
+          },
+          {
+            path: ':formKey',
+            name: 'FlowDesignerEdit',
+            component: () => import('@/views/meta/flow/designer.vue'),
+            meta: { title: '流程设计' },
+          },
+        ],
+      },      {
         // 低代码填报。★ 这里**没有写死任何表单标识** ——
         // 清单从后端 meta_form 查，:formKey 由用户点击带入。
         // 在设计器里发布一张新表单，它会自动出现在清单里，不动这个文件。

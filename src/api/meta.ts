@@ -106,3 +106,49 @@ export function publishFormApi(schema: unknown) {
     headers: { 'Content-Type': 'application/json' },
   })
 }
+
+// ---------------------------------------------------------------- 流程定义
+
+/** 流程发布结果，与后端 FlowPublishService.PublishOutcome 对应 */
+export interface FlowPublishOutcome {
+  flowKey: string
+  version: number
+  status: string
+  problems: string[]
+}
+
+export interface FlowSummary {
+  flowKey: string
+  formKey: string
+  status: string
+  currentVersion: number | null
+  /** I18nText 的原始 JSON 文本 */
+  name: string | null
+}
+
+/** 某张表单挂着的流程清单 */
+export function listFlowsApi(formKey?: string) {
+  return request<FlowSummary[]>({ url: '/meta/flow/list', method: 'get', params: { formKey } })
+}
+
+/**
+ * 载入某流程当前生效的定义，返回**原始 JSON 文本**。
+ *
+ * ★ 刻意不在前端反序列化再重新序列化：设计器要原样拿回它自己写进去的每个属性。
+ */
+export function getFlowDefinitionApi(flowKey: string) {
+  return request<string>({ url: '/meta/flow/definition', method: 'get', params: { flowKey } })
+}
+
+/**
+ * 发布流程定义。请求体是**原始 JSON 文本**，理由同 publishFormApi：
+ * 后端用 @RequestBody String 直接收原始 body，一步都不经过 FlowSchemaDef。
+ */
+export function publishFlowApi(definition: unknown) {
+  return request<FlowPublishOutcome>({
+    url: '/meta/flow/publish',
+    method: 'post',
+    data: typeof definition === 'string' ? definition : JSON.stringify(definition, null, 2),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
