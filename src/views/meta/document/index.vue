@@ -10,14 +10,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import FormRenderer from '@/components/schema/FormRenderer.vue'
-import { getFlowDefinitionApi, getPublishedFormApi, saveDocumentApi } from '@/api/meta'
+import { getFlowDefinitionApi, getPublishedFormApi, saveDocumentApi, getDocumentApi } from '@/api/meta'
+import { startFlowApi } from '@/api/flow'
 import { useAuthStore } from '@/stores/auth'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { resolveI18n, type FormSchema } from '@/schema'
 
 const auth = useAuthStore()
 
 const route = useRoute()
+const router = useRouter()
 /** ★ 表单标识来自**路由参数**，不再是代码里的常量。
  *   加一张表单只需要在设计器里发布它 —— 列表里会出现，点进来就是这里。 */
 const FORM_KEY = ref(String(route.params.formKey ?? ''))
@@ -100,6 +102,19 @@ onMounted(async () => {
     }
     for (const sub of published.schema.subForms ?? []) seed[sub.key] = []
     values.value = seed
+
+    // 带 documentId 进来 = 看一张已存在的单子（待办列表点标题走这条路）
+    const existingId = route.query.documentId
+    if (existingId) {
+      const existing = await getDocumentApi(Number(existingId))
+      documentId.value = existing.id
+      // 用已保存的值盖掉空骨架。schema 里没有的键也留着 ——
+      // 丢字段会让"看一眼"变成"顺手删了一个字段"
+      values.value = { ...seed, ...(existing.data ?? {}) }
+      for (const [k, v] of Object.entries(existing.subForms ?? {})) {
+        values.value[k] = v
+      }
+    }
   } catch (e) {
     ElMessage.error('无法加载表单定义：' + (e as Error).message)
   } finally {
@@ -129,6 +144,18 @@ async function submit() {
       subForms,
     })
     documentId.value = saved.id
+
+    // ★ 存完单据再发起流程 —— 顺序不能反。
+    //   审批人可能按单据字段来定（"被检查单位负责人"），单据没落库就解析不出人，
+    //   结果是流程一发起就 STUCK。
+    if (flowKey.value) {
+      await startFlowApi(flowKey.value, saved.id)
+      ElMessage.success('已提交，进入审批流程')
+      // 发起后当前节点已经不是发起了，留在这一页再点"提交"没有意义
+      router.push('/flow/todo')
+      return
+    }
+
     ElMessage.success(`已保存，单据号 ${saved.id}，表单版本 v${saved.formDefVersion}`)
   } catch (e) {
     // 后端返回的是逐条问题的多行文本（不是第一条）。

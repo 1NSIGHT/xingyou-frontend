@@ -53,6 +53,12 @@ const routes: RouteRecordRaw[] = [
         redirect: '/flow/apply',
         children: [
           {
+            path: 'todo',
+            name: 'FlowTodo',
+            component: () => import('@/views/meta/flow/todo.vue'),
+            meta: { title: '我的待办', menuKey: 'flow:todo' },
+          },
+          {
             path: 'apply',
             name: 'FlowApply',
             component: () => import('@/views/meta/flow/apply.vue'),
