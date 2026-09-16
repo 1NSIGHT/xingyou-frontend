@@ -60,3 +60,11 @@ jobs:
       - name: 条件求值语义一致性（对后端共享测试向量）
         working-directory: xingyou-frontend
         run: npm run check:condition
+
+      # 权限判定与条件求值一样，是**跨仓库共享一份契约**：
+      # 后端 FieldPermission / FieldDef 与前端 permission.ts 是两份实现，
+      # 靠同一份 permission-vectors.json 锁住。漂移的表现是
+      # "前端画出一个用户改不了的输入框"，不会报错。
+      - name: 字段访问判定一致性（对后端共享测试向量）
+        working-directory: xingyou-frontend
+        run: npm run check:permission

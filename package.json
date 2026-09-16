@@ -11,7 +11,8 @@
     "typecheck": "vue-tsc --noEmit",
     "check:types": "node scripts/check-field-types.mjs",
     "check:condition": "node scripts/check-condition.mjs",
-    "check": "npm run typecheck && npm run check:types && npm run check:condition"
+    "check:permission": "node scripts/check-permission.mjs",
+    "check": "npm run typecheck && npm run check:types && npm run check:condition && npm run check:permission"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
