@@ -286,7 +286,19 @@ export interface FieldPermission {
   write?: string[]
   /** 完全不可见（字段不出现在响应里） */
   hidden?: string[]
+  /**
+   * 通配符 `'*'` 表示「所有能访问该单据的角色」。
+   *
+   * 没有它就必须把租户里每个角色都列进 `read`，而角色一新增就会漏掉 ——
+   * 漏掉的表现是「新角色的人看不到这个字段」，属于静默故障。
+   *
+   * 不适用于**没有角色**的用户：角色集为空时一律 HIDDEN。
+   */
+  // 用法示例：{ read: ['*'], write: ['SUPERVISOR'] }
 }
+
+/** 字段权限中的通配符。与后端 FieldPermission.WILDCARD 对应 */
+export const PERMISSION_WILDCARD = '*'
 
 /** 动态默认值令牌。刻意只支持固定枚举，不支持任意表达式 */
 export type DefaultValueToken =
@@ -326,6 +338,27 @@ export interface FieldDef {
   disabled?: Condition
   permission?: FieldPermission
 
+  // ---------------------------------------------------------- 节点作用域
+  // 规范 3.7.1：字段权限是「角色 × 节点」两个**正交维度**。
+  //   permission 管「谁能写」，下面三个管「什么时候能写」。
+  //
+  // ★ 无流程单据（当前节点为 null）时三个属性一律**不生效**，
+  //   即退化为原语义 —— 不是「约束取消」。
+
+  /** 只在列出的流程节点可写。为空 = 不限节点。与 permission 取交集 */
+  writeNodes?: string[]
+  /**
+   * 必填性**完全由它决定**（覆盖 required 布尔）。为空 = 沿用 required。
+   *
+   * 为什么是「覆盖」而不是「取交集」：`required` 是布尔，
+   * **没有「节点范围」这个概念**，只能让它接管。
+   *
+   * 存在的理由：整改内容若写成 `required: true`，发起阶段它是空的，单据根本提交不了。
+   */
+  requiredNodes?: string[]
+  /** 只在列出的流程节点可见。为空 = 不限节点。与角色权限取交集 */
+  visibleNodes?: string[]
+
   /** 仅 section 使用 */
   children?: FieldDef[]
   collapsible?: boolean
@@ -349,6 +382,11 @@ export interface SubFormColumn {
   disabled?: Condition
   permission?: FieldPermission
   defaultValue?: unknown | DefaultValueToken
+
+  /** 节点作用域，语义同 FieldDef（规范 3.7.1） */
+  writeNodes?: string[]
+  requiredNodes?: string[]
+  visibleNodes?: string[]
 }
 
 export interface SubFormDef {
