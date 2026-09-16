@@ -51,6 +51,11 @@ service.interceptors.response.use(
   },
   (error): any => {
     const status = error?.response?.status
+    // 与后端约定：认证失败返回真实的 HTTP 401，4xx 会让 axios 走 reject 分支，
+    // 所以令牌清理要在这里做（上面那个成功分支只处理 HTTP 200 的业务码）
+    if (status === CODE_UNAUTHORIZED) {
+      localStorage.removeItem(TOKEN_KEY)
+    }
     const message =
       status === CODE_UNAUTHORIZED
         ? '登录状态已失效，请重新登录'

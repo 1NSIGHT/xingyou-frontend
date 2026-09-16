@@ -17,7 +17,7 @@ import {
 import BrandLogo from '@/components/BrandLogo.vue'
 import GraphicCaptcha from '@/components/GraphicCaptcha.vue'
 import { useAuthStore } from '@/stores/auth'
-import { sendSmsCodeApi, type LoginType } from '@/api/auth'
+import { getCaptchaApi, sendSmsCodeApi, type LoginType } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -30,6 +30,15 @@ const loading = ref(false)
 const smsCounting = ref(0)
 const formRef = ref<FormInstance>()
 const captchaRef = ref<InstanceType<typeof GraphicCaptcha> | null>(null)
+
+/**
+ * Mock 模式下图形验证码走本地 Canvas（不需要后端）；
+ * 接真实后端时改为服务端下发，captchaKey 必须原样回传，否则后端校验不过。
+ */
+const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+const serverCaptchaKey = ref('')
+const serverCaptchaImage = ref('')
+
 const agreed = ref(true)
 
 const form = reactive({
@@ -71,13 +80,13 @@ const features = [
   },
 ]
 
-/** 图形验证码校验器（本地 Canvas 版；接入后端后改为服务端校验） */
+/** 图形验证码校验器。服务端模式下只校验非空，正确性由后端判断 */
 const captchaValidator = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (!value) {
     callback(new Error('请输入图形验证码'))
     return
   }
-  if (!captchaRef.value?.validate(value)) {
+  if (useMock && !captchaRef.value?.validate(value)) {
     callback(new Error('图形验证码不正确'))
     return
   }
@@ -117,9 +126,25 @@ function switchType(type: LoginType) {
   formRef.value?.clearValidate()
 }
 
-function resetCaptcha() {
+/** 刷新验证码：Mock 模式重画本地 Canvas，否则向后端要一张新的 */
+async function refreshCaptcha() {
   form.captcha = ''
-  captchaRef.value?.refresh()
+  if (useMock) {
+    captchaRef.value?.refresh()
+    return
+  }
+  try {
+    const result = await getCaptchaApi()
+    serverCaptchaKey.value = result.captchaKey
+    serverCaptchaImage.value = result.captchaImage
+  } catch {
+    // 错误提示已由请求拦截器统一处理
+  }
+}
+
+/** 同步入口：登录失败后需要换一张验证码 */
+function resetCaptcha() {
+  void refreshCaptcha()
 }
 
 async function handleSendSms() {
@@ -161,7 +186,7 @@ async function handleSubmit() {
       mobile: form.mobile,
       smsCode: form.smsCode,
       captcha: form.captcha,
-      captchaKey: 'local-canvas',
+      captchaKey: useMock ? 'local-canvas' : serverCaptchaKey.value,
       rememberMe: form.rememberMe,
     })
 
@@ -200,6 +225,8 @@ onMounted(() => {
     form.username = remembered
     form.rememberMe = true
   }
+  // 服务端模式下进页面就先取一张验证码
+  void refreshCaptcha()
 })
 </script>
 
@@ -350,7 +377,15 @@ onMounted(() => {
                 :prefix-icon="Key"
                 maxlength="4"
               />
-              <GraphicCaptcha ref="captchaRef" :width="112" :height="44" />
+              <GraphicCaptcha v-if="useMock" ref="captchaRef" :width="112" :height="44" />
+              <img
+                v-else
+                class="server-captcha"
+                :src="serverCaptchaImage"
+                alt="图形验证码"
+                title="点击刷新"
+                @click="refreshCaptcha"
+              />
             </div>
           </el-form-item>
 
@@ -676,6 +711,28 @@ onMounted(() => {
 :deep(.el-form-item__error) {
   padding-top: 5px;
   font-size: 12.5px;
+}
+
+.graphic-captcha-placeholder {
+  display: block;
+}
+
+.server-captcha {
+  display: block;
+  width: 112px;
+  height: 46px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--xy-radius);
+  border: 1px solid var(--xy-border);
+  background: #f2f6fb;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.2s;
+
+  &:hover {
+    border-color: var(--xy-navy-300);
+  }
 }
 
 /* 输入框 + 按钮 / 验证码 同行布局 */
