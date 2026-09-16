@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import type { FieldCategory, FieldDef, FieldType } from './types'
+import type { FieldCategory, FieldDef, FieldType, I18nText } from './types'
 import { FIELD_TYPES } from './constants'
 
 /**
@@ -20,15 +20,16 @@ import { FIELD_TYPES } from './constants'
 export interface PropertyDescriptor {
   /** 属性名。写入位置由 target 决定 */
   key: string
-  label: string
+  /** 显示名。多语言，见 I18nText */
+  label: I18nText
   editor: 'input' | 'textarea' | 'number' | 'switch' | 'select' | 'dictSelect'
   /** 写入字段顶层属性（如 span）还是 props 里（如 maxlength） */
   target: 'field' | 'props'
   default?: unknown
   /** editor 为 select 时的候选项 */
-  options?: Array<{ label: string; value: unknown }>
+  options?: Array<{ label: I18nText; value: unknown }>
   /** 提示语 */
-  tip?: string
+  tip?: I18nText
 }
 
 export interface MaterialDefinition {
@@ -182,4 +183,59 @@ export function registerBaseMaterials(): void {
   for (const type of FIELD_TYPES) {
     registerMaterial(baseMaterial(type))
   }
+}
+
+// ============================================================ 数据源选择器
+
+/**
+ * 数据源选择器 —— 后端 `DataSourceResolver` SPI 的前端对应物。
+ *
+ * 内核认识 5 种 kind（dict / ledger / form / user / cascade），
+ * 行业可注册带命名空间的扩展 kind（如 `industry:device`）。
+ *
+ * ★ 找不到对应选择器时，渲染器必须**渲染成禁用状态并显示原因**，
+ *   而不是留一个点了没反应的输入框 —— 后者会让用户以为是系统卡了。
+ */
+export interface DataSourceSelectorDefinition {
+  /** 与后端 DataSourceResolver.kind() 必须一致 */
+  kind: string
+  label: I18nText
+  /** 选中后回填其它字段时的取值字段，通常为 valueField */
+  component: () => Promise<Component>
+  /** 该数据源在设计器里需要配置哪些项 */
+  configurableProps?: PropertyDescriptor[]
+}
+
+const SELECTOR_REGISTRY = new Map<string, DataSourceSelectorDefinition>()
+
+export function registerDataSourceSelector(def: DataSourceSelectorDefinition): void {
+  if (SELECTOR_REGISTRY.has(def.kind)) {
+    console.warn(`[schema] 数据源选择器 "${def.kind}" 被重复注册，后注册的生效`)
+  }
+  SELECTOR_REGISTRY.set(def.kind, def)
+}
+
+export function getDataSourceSelector(kind: string): DataSourceSelectorDefinition | undefined {
+  return SELECTOR_REGISTRY.get(kind)
+}
+
+export function allDataSourceSelectors(): DataSourceSelectorDefinition[] {
+  return Array.from(SELECTOR_REGISTRY.values())
+}
+
+/**
+ * 判断 kind 是否为内核种类。
+ *
+ * 非内核的 kind **必须**带命名空间（含 `:`），见规范 3.4.2。
+ * 这个判断同时用于发布校验：既不是内核种类、又没注册解析器的 kind 会被拒绝。
+ */
+export const KERNEL_DATA_SOURCE_KINDS = ['dict', 'ledger', 'form', 'user', 'cascade'] as const
+
+export function isKernelDataSourceKind(kind: string): boolean {
+  return (KERNEL_DATA_SOURCE_KINDS as readonly string[]).includes(kind)
+}
+
+/** 扩展 kind 必须形如 `<namespace>:<name>` */
+export function isValidExtensionKind(kind: string): boolean {
+  return /^[a-z][a-z0-9]*:[a-zA-Z][a-zA-Z0-9]*$/.test(kind)
 }

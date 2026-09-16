@@ -8,6 +8,44 @@
  *   前后端不一致的后果是数据静默变形（前端按 number 提交、后端按 string 存）。
  */
 
+// ============================================================ 多语言文本
+
+/**
+ * 多语言文本。所有**面向用户展示**的文本都用它，而不是裸字符串。
+ *
+ * 两种写法都合法：
+ * ```ts
+ * "焊口编号"                                  // 简写：单语言
+ * { 'zh-CN': '焊口编号', en: 'Weld No.' }     // 完整：多语言
+ * ```
+ *
+ * 解析回退链：请求语言 → zh-CN → 对象中的第一个值 → 空字符串。
+ * 因此**裸字符串天然兼容**，历史 schema 无需修改。
+ *
+ * 不适用：key / formKey / type / dictCode / 角色编码等**标识符**——它们不翻译。
+ */
+export type I18nText = string | Record<string, string>
+
+/** 基线语言。缺失任何翻译时回退到它 */
+export const DEFAULT_LOCALE = 'zh-CN'
+
+/**
+ * 按语言解析 I18nText。
+ *
+ * 前端渲染器与后端响应裁剪**必须使用同一套回退规则**，
+ * 否则会出现「前端显示中文、导出 PDF 是空白」这类不一致。
+ */
+export function resolveI18n(text: I18nText | undefined | null, locale = DEFAULT_LOCALE): string {
+  if (!text) return ''
+  if (typeof text === 'string') return text
+
+  if (text[locale]) return text[locale]
+  if (text[DEFAULT_LOCALE]) return text[DEFAULT_LOCALE]
+
+  const first = Object.values(text)[0]
+  return first ?? ''
+}
+
 // ============================================================ 基础枚举
 
 /**
@@ -88,8 +126,8 @@ export type RuleName =
 
 export interface ValidationRule {
   rule: RuleName
-  /** 自定义提示语；不填则用默认文案 */
-  message?: string
+  /** 自定义提示语；不填则用默认文案。多语言，见 I18nText */
+  message?: I18nText
 
   // length / countRange
   min?: number
@@ -116,13 +154,31 @@ export interface ValidationRule {
 
 // ============================================================ 数据源
 
+/**
+ * 数据源 —— 字段的选项来源。
+ *
+ * `kind` **不是封闭枚举**（规范 3.4.2）：
+ * - 内核种类：`dict` / `ledger` / `form` / `user` / `cascade`（无前缀）
+ * - 扩展种类：**必须带命名空间**，如 `industry:device`、`power:meter`
+ *
+ * 未注册的 kind 在发布时被拒绝（后端侧由 DataSourceResolver SPI 判定）。
+ */
+export type KernelDataSourceKind = 'dict' | 'ledger' | 'form' | 'user' | 'cascade'
+
 /** 静态字典 */
 export interface DictDataSource {
   kind: 'dict'
   dictCode: string
 }
 
-/** 关联业务台账（如焊口台账） */
+/**
+ * 关联业务台账。
+ *
+ * 台账标识由后端解析，可能是两种形态（规范 3.4.2 b）：
+ * - **物理表台账**：高频核心实体（焊口、管线），独立表 + 索引，查询性能最好
+ * - **元数据台账**：长尾台账，由 meta_ledger 描述字段，不写代码
+ * schema 无需区分，取值完全相同。
+ */
 export interface LedgerDataSource {
   kind: 'ledger'
   ledger: string
@@ -130,6 +186,29 @@ export interface LedgerDataSource {
   labelField: string
   displayFields?: string[]
   /** 与其它字段联动过滤 */
+  filters?: Array<{ field: string; sourceField: string }>
+  multiple?: boolean
+  pageSize?: number
+}
+
+/**
+ * 引用**另一张表单**的数据。
+ *
+ * 解决「整改通知单引用质量检查单」这类表单间引用 —— v1.1 不支持，
+ * 导致整改闭环类业务做不顺。
+ *
+ * ★ 三条安全约束（后端必须实现）：
+ *   1. 继承被引用表单的权限：用户无权查看的单据不出现在候选列表里
+ *   2. 受数据权限约束：跨项目数据不可见
+ *   3. 状态过滤：默认只列 APPROVED，是否允许引用草稿由 props.allowDraft 控制
+ */
+export interface FormDataSource {
+  kind: 'form'
+  /** 被引用的表单标识 */
+  formKey: string
+  valueField: string
+  labelField: string
+  displayFields?: string[]
   filters?: Array<{ field: string; sourceField: string }>
   multiple?: boolean
   pageSize?: number
@@ -154,7 +233,7 @@ export interface CascadeDataSource {
   kind: 'cascade'
   levels: Array<{
     key: string
-    label: string
+    label: I18nText
     source: DictDataSource | GbDivisionSource
   }>
   valueMode?: 'ALL_LEVELS' | 'LEAF_ONLY'
@@ -168,7 +247,35 @@ export interface CascadeDataSource {
   storageLevel?: 1 | 2 | 3 | 4
 }
 
-export type DataSource = DictDataSource | LedgerDataSource | UserDataSource | CascadeDataSource
+/**
+ * 行业扩展的数据源。
+ *
+ * kind 形如 `<namespace>:<name>`，由行业模块通过 DataSourceResolver SPI 注册。
+ * 前端渲染器按 kind 查找已注册的选择器组件；找不到时**渲染成禁用状态并显示原因**，
+ * 而不是留一个点了没反应的输入框。
+ */
+export interface ExtensionDataSource {
+  kind: `${string}:${string}`
+  /** 扩展数据源的参数由各行业模块自行约定 */
+  [key: string]: unknown
+}
+
+export type DataSource =
+  | DictDataSource
+  | LedgerDataSource
+  | FormDataSource
+  | UserDataSource
+  | CascadeDataSource
+  | ExtensionDataSource
+
+/** 数据源候选选项，与后端 DataSourceOption 对应 */
+export interface DataSourceOption {
+  value: unknown
+  /** 展示文本。台账/表单的 label 由数据本身决定，不需翻译 */
+  label: string
+  /** 额外字段，用于选中后回填其它字段 */
+  extra?: Record<string, unknown>
+}
 
 // ============================================================ 字段
 
@@ -192,7 +299,8 @@ export type DefaultValueToken =
 export interface FieldDef {
   /** ★ 稳定标识，发布后不可修改（铁律 1） */
   key: string
-  label: string
+  /** 展示文本。多语言，见 I18nText */
+  label: I18nText
   type: FieldType
   /** 存储类型；多数情况由 type 推导，行业物料可显式指定 */
   valueType?: ValueType
@@ -204,8 +312,8 @@ export interface FieldDef {
   indexable?: boolean
   unique?: boolean
 
-  placeholder?: string
-  tip?: string
+  placeholder?: I18nText
+  tip?: I18nText
   defaultValue?: unknown | DefaultValueToken
   /** 已下线字段：不渲染、不可查，但保留 key 以解析历史数据（规范 8.5） */
   archived?: boolean
@@ -228,7 +336,7 @@ export interface FieldDef {
 
 export interface SubFormColumn {
   key: string
-  label: string
+  label: I18nText
   type: FieldType
   valueType?: ValueType
   required?: boolean
@@ -245,7 +353,7 @@ export interface SubFormColumn {
 
 export interface SubFormDef {
   key: string
-  label: string
+  label: I18nText
   /** 桌面端呈现：表格内联编辑 / 卡片列表 */
   mode: 'TABLE' | 'LIST'
   /** 移动端呈现，默认 LIST —— 表格在手机上放不下 */
@@ -295,7 +403,8 @@ export interface FormSchema {
   $schema: 'xy-form/v1'
   /** ★ 稳定标识，发布后不可修改 */
   formKey: string
-  name: string
+  /** 展示名称。多语言，见 I18nText */
+  name: I18nText
   /** 取自字典 form_category */
   category?: string
   layout: LayoutDef
