@@ -82,3 +82,27 @@ export interface FormSummary {
 export function listFormsApi() {
   return request<FormSummary[]>({ url: '/meta/form', method: 'get' })
 }
+export interface PublishOutcome {
+  formKey: string
+  version: number
+  status: string
+  statementCount: number
+}
+
+/**
+ * 发布表单定义。
+ *
+ * ★ 请求体是**原始 schema 文本**，刻意不先用 JSON.stringify 包一层对象。
+ *   后端用 @RequestBody String 直接收原始 body，一步都不经过 FormSchemaDef ——
+ *   一旦某个环节把 schema 解析成后端模型再写回，设计器不认识的属性会被静默删掉
+ *   （用户看到的现象是"保存一次少一个配置"）。
+ *   axios 传字符串时不会再加引号，正好符合这个约定。
+ */
+export function publishFormApi(schema: unknown) {
+  return request<PublishOutcome>({
+    url: '/meta/form/publish',
+    method: 'post',
+    data: typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

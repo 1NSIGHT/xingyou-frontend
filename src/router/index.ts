@@ -22,6 +22,25 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台' },
       },
       {
+        // 表单设计器 —— 低代码平台的**定义入口**。
+        // 没有它，用户只能在运行时填表、不能定义表，那就不是低代码平台。
+        path: 'designer',
+        meta: { title: '表单设计' },
+        children: [
+          {
+            path: '',
+            name: 'DesignerNew',
+            component: () => import('@/views/meta/designer/index.vue'),
+            meta: { title: '新建表单' },
+          },
+          {
+            path: ':formKey',
+            name: 'DesignerEdit',
+            component: () => import('@/views/meta/designer/index.vue'),
+            meta: { title: '编辑表单' },
+          },
+        ],
+      },      {
         // 低代码填报。★ 这里**没有写死任何表单标识** ——
         // 清单从后端 meta_form 查，:formKey 由用户点击带入。
         // 在设计器里发布一张新表单，它会自动出现在清单里，不动这个文件。
