@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "check:types": "node scripts/check-field-types.mjs",
-    "check": "npm run typecheck && npm run check:types"
+    "check:condition": "node scripts/check-condition.mjs",
+    "check": "npm run typecheck && npm run check:types && npm run check:condition"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
