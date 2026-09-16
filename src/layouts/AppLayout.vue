@@ -17,16 +17,64 @@ interface MenuItem {
   path: string
   title: string
   icon: string
+  /** 仅系统管理员可见。与后端 @PreAuthorize 保持一致，避免点进去吃 403 */
+  requiresAdmin?: boolean
   children?: MenuItem[]
 }
 
 /**
  * 侧边栏菜单。
  *
- * <p>「系统管理」刻意不放在这里——它属于低频的管理员配置项，
- * 放在右上角头像菜单里，且仅系统管理员可见。
+ * <p><b>★ 这里只放「平台能力」，不放业务。</b> 两者要分开看：
+ *
+ * <ul>
+ *   <li><b>平台固定入口</b> —— 工作台、提交申请、单据填报、表单设计、流程设计。
+ *       这些是平台本身的功能，写在这里是对的，加一个平台能力才需要改这个文件。</li>
+ *   <li><b>业务事项</b>（不符合项、巡检记录……）—— <b>一律不能出现在这里。</b>
+ *       它们由「提交申请」页从 meta_flow 里查出来渲染。新增一种申请 = 在设计器里
+ *       配一张表单 + 配一条流程，这个文件一行都不用改。</li>
+ * </ul>
+ *
+ * <p>把业务菜单也写死在这里，就等于"加一张表单要改一次代码 + 发一次版"，
+ * 那正是低代码要消灭的东西。
+ *
+ * <p>「系统管理」刻意不放这里——它属于低频的管理员配置项，
+ * 放在右上角头像菜单里。
  */
-const menus: MenuItem[] = [{ path: '/', title: '工作台', icon: 'HomeFilled' }]
+const ALL_MENUS: MenuItem[] = [
+  { path: '/', title: '工作台', icon: 'HomeFilled' },
+  {
+    path: '/flow',
+    title: '流程',
+    icon: 'Promotion',
+    children: [
+      { path: '/flow/apply', title: '提交申请', icon: 'EditPen' },
+      { path: '/document', title: '单据填报', icon: 'Document' },
+    ],
+  },
+  {
+    path: '/platform',
+    title: '平台配置',
+    icon: 'SetUp',
+    requiresAdmin: true,
+    children: [
+      { path: '/designer', title: '表单设计', icon: 'Grid', requiresAdmin: true },
+      { path: '/flow/design', title: '流程设计', icon: 'Share', requiresAdmin: true },
+    ],
+  },
+]
+
+/** 按权限过滤。子项全被滤掉的组整组不显示 —— 否则会留下一个点不开的空壳 */
+const menus = computed<MenuItem[]>(() => {
+  const admin = auth.isAdmin
+  return ALL_MENUS.filter((m) => !m.requiresAdmin || admin)
+    .map((m) =>
+      m.children
+        ? { ...m, children: m.children.filter((c) => !c.requiresAdmin || admin) }
+        : m,
+    )
+    .filter((m) => !m.children || m.children.length > 0)
+})
 
 /** 面包屑：从当前路由的 matched 里取有 title 的层级 */
 const breadcrumbs = computed(() =>

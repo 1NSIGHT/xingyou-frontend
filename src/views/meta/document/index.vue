@@ -10,7 +10,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import FormRenderer from '@/components/schema/FormRenderer.vue'
-import { getPublishedFormApi, saveDocumentApi } from '@/api/meta'
+import { getFlowDefinitionApi, getPublishedFormApi, saveDocumentApi } from '@/api/meta'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute } from 'vue-router'
 import { resolveI18n, type FormSchema } from '@/schema'
@@ -20,9 +20,21 @@ const auth = useAuthStore()
 const route = useRoute()
 /** ★ 表单标识来自**路由参数**，不再是代码里的常量。
  *   加一张表单只需要在设计器里发布它 —— 列表里会出现，点进来就是这里。 */
-const FORM_KEY = String(route.params.formKey ?? '')
-/** 演示用的流程节点。正式形态由待办带入（"我现在处理的是哪个环节"） */
-const NODE_KEY = 'start'
+const FORM_KEY = ref(String(route.params.formKey ?? ''))
+
+/**
+ * 当前流程节点。
+ *
+ * ★ 从流程定义里取 START 节点的 key，而不是写死 'start'。
+ *   ncr 表单把归档节点叫 archived，别的流程完全可以把发起节点叫 submit ——
+ *   写死 'start' 会让那些表单的节点作用域**静默失效**：权限不生效，
+ *   但页面看起来一切正常，也不报错。
+ */
+const NODE_KEY = ref('start')
+
+/** 发起来源的流程。从「提交申请」进来时带上 */
+const flowKey = ref(String(route.query.flowKey ?? ''))
+const flowLabel = ref('')
 
 const schema = ref<FormSchema | null>(null)
 const version = ref(0)
@@ -38,14 +50,44 @@ const projectId = computed(() => {
   return raw ? Number(raw) : undefined
 })
 
+/** 先按流程把 formKey 与节点定下来，再加载表单 */
+async function resolveFlow() {
+  if (!flowKey.value) return
+  try {
+    const raw = await getFlowDefinitionApi(flowKey.value)
+    if (!raw) {
+      ElMessage.warning('该流程还没有已发布版本，按无流程方式填报')
+      return
+    }
+    const def = JSON.parse(raw) as {
+      formKey?: string
+      name?: unknown
+      nodes?: Array<{ key: string; type: string }>
+    }
+    // 以流程里绑定的表单为准：它才是"这条流程办的是哪种单子"的权威答案
+    if (def.formKey) FORM_KEY.value = def.formKey
+    const start = (def.nodes ?? []).find((n) => n.type === 'START')
+    if (start?.key) NODE_KEY.value = start.key
+    flowLabel.value =
+      typeof def.name === 'string'
+        ? def.name
+        : String((def.name as Record<string, string> | undefined)?.['zh-CN'] ?? '')
+  } catch {
+    // 读不到流程不该把填报整个堵死 —— 退化成"无流程填报"，并在页头上体现出来
+    ElMessage.warning('流程定义读取失败，已按无流程方式填报')
+    flowKey.value = ''
+  }
+}
+
 onMounted(async () => {
-  if (!FORM_KEY) {
+  await resolveFlow()
+  if (!FORM_KEY.value) {
     ElMessage.error('缺少表单标识')
     return
   }
   loading.value = true
   try {
-    const published = await getPublishedFormApi(FORM_KEY)
+    const published = await getPublishedFormApi(FORM_KEY.value)
     schema.value = published.schema
     version.value = published.version
     // ★ 以 schema 里的字段为骨架先铺一遍空值。
@@ -79,10 +121,10 @@ async function submit() {
     }
 
     const saved = await saveDocumentApi({
-      formKey: FORM_KEY,
+      formKey: FORM_KEY.value,
       projectId: projectId.value,
       documentId: documentId.value ?? undefined,
-      nodeKey: NODE_KEY,
+      nodeKey: NODE_KEY.value,
       data,
       subForms,
     })
@@ -107,6 +149,7 @@ async function submit() {
         <div class="xy-header">
           <span>{{ schema?.name ? resolveI18n(schema.name, "zh-CN") : FORM_KEY }}</span>
           <el-tag v-if="version" type="info" size="small">表单版本 v{{ version }}</el-tag>
+          <el-tag v-if="flowLabel" size="small" type="success">申请：{{ flowLabel }}</el-tag>
           <el-tag type="warning" size="small">当前节点：{{ NODE_KEY }}</el-tag>
         </div>
       </template>

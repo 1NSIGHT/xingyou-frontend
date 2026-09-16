@@ -31,33 +31,45 @@ const routes: RouteRecordRaw[] = [
             path: '',
             name: 'DesignerNew',
             component: () => import('@/views/meta/designer/index.vue'),
-            meta: { title: '新建表单' },
+            meta: { title: '新建表单', requiresAdmin: true },
           },
           {
             path: ':formKey',
             name: 'DesignerEdit',
             component: () => import('@/views/meta/designer/index.vue'),
-            meta: { title: '编辑表单' },
+            meta: { title: '编辑表单', requiresAdmin: true },
           },
         ],
       },      {
-        // 流程设计器 —— 低代码平台的**第二个定义入口**。
+        // 流程 —— 低代码平台的**第二个定义入口**，以及它的业务入口。
         // 表单定义回答"一张单据长什么样"，流程定义回答"它怎么流转"。
-        // 同样没有写死任何流程标识，:formKey 只是带过去绑定用。
+        //
+        // ★ 刻意分成 apply / design 两段，而不是让设计器占着 /flow：
+        //   设计器原来是 /flow/:formKey，那样 /flow/apply 会被当成
+        //   "formKey = apply 的设计器" —— 一个很隐蔽的路由相撞。
         path: 'flow',
-        meta: { title: '流程设计' },
+        meta: { title: '流程' },
+        redirect: '/flow/apply',
         children: [
           {
-            path: '',
-            name: 'FlowDesignerNew',
-            component: () => import('@/views/meta/flow/designer.vue'),
-            meta: { title: '新建流程' },
+            path: 'apply',
+            name: 'FlowApply',
+            component: () => import('@/views/meta/flow/apply.vue'),
+            meta: { title: '提交申请' },
           },
           {
-            path: ':formKey',
+            // 发布流程会做表单交叉校验，后端限系统管理员，
+            // 前端也挡住 —— 否则非管理员点进去只会得到一个 403
+            path: 'design',
+            name: 'FlowDesignerNew',
+            component: () => import('@/views/meta/flow/designer.vue'),
+            meta: { title: '新建流程', requiresAdmin: true },
+          },
+          {
+            path: 'design/:formKey',
             name: 'FlowDesignerEdit',
             component: () => import('@/views/meta/flow/designer.vue'),
-            meta: { title: '流程设计' },
+            meta: { title: '流程设计', requiresAdmin: true },
           },
         ],
       },      {
