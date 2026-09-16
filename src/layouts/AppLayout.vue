@@ -4,77 +4,33 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
+import { useMenuStore } from '@/stores/menu'
 import BrandLogo from '@/components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const projectStore = useProjectStore()
+const menuStore = useMenuStore()
 
 const collapsed = ref(false)
-
-interface MenuItem {
-  path: string
-  title: string
-  icon: string
-  /** 仅系统管理员可见。与后端 @PreAuthorize 保持一致，避免点进去吃 403 */
-  requiresAdmin?: boolean
-  children?: MenuItem[]
-}
 
 /**
  * 侧边栏菜单。
  *
- * <p><b>★ 这里只放「平台能力」，不放业务。</b> 两者要分开看：
+ * <p><b>★ 菜单树不在这里定义。</b> 它来自后端 {@code GET /api/system/menu/mine}，
+ * 由「角色管理 → 菜单权限」按角色配置。
  *
- * <ul>
- *   <li><b>平台固定入口</b> —— 工作台、提交申请、单据填报、表单设计、流程设计。
- *       这些是平台本身的功能，写在这里是对的，加一个平台能力才需要改这个文件。</li>
- *   <li><b>业务事项</b>（不符合项、巡检记录……）—— <b>一律不能出现在这里。</b>
- *       它们由「提交申请」页从 meta_flow 里查出来渲染。新增一种申请 = 在设计器里
- *       配一张表单 + 配一条流程，这个文件一行都不用改。</li>
- * </ul>
+ * <p>原因：菜单写在前端就必然要和后端的鉴权规则各维护一份，
+ * 而这两份迟早会不一致 —— 要么菜单露出来但点进去吃 403，
+ * 要么菜单藏了但其实允许访问。菜单只有一个权威来源，就是后端。
  *
- * <p>把业务菜单也写死在这里，就等于"加一张表单要改一次代码 + 发一次版"，
- * 那正是低代码要消灭的东西。
- *
- * <p>「系统管理」刻意不放这里——它属于低频的管理员配置项，
- * 放在右上角头像菜单里。
+ * <p>这里只做一件事：把后端给的树画出来。
  */
-const ALL_MENUS: MenuItem[] = [
-  { path: '/', title: '工作台', icon: 'HomeFilled' },
-  {
-    path: '/flow',
-    title: '流程',
-    icon: 'Promotion',
-    children: [
-      { path: '/flow/apply', title: '提交申请', icon: 'EditPen' },
-      { path: '/document', title: '单据填报', icon: 'Document' },
-    ],
-  },
-  {
-    path: '/platform',
-    title: '平台配置',
-    icon: 'SetUp',
-    requiresAdmin: true,
-    children: [
-      { path: '/designer', title: '表单设计', icon: 'Grid', requiresAdmin: true },
-      { path: '/flow/design', title: '流程设计', icon: 'Share', requiresAdmin: true },
-    ],
-  },
-]
+const menus = computed(() => menuStore.menus)
 
-/** 按权限过滤。子项全被滤掉的组整组不显示 —— 否则会留下一个点不开的空壳 */
-const menus = computed<MenuItem[]>(() => {
-  const admin = auth.isAdmin
-  return ALL_MENUS.filter((m) => !m.requiresAdmin || admin)
-    .map((m) =>
-      m.children
-        ? { ...m, children: m.children.filter((c) => !c.requiresAdmin || admin) }
-        : m,
-    )
-    .filter((m) => !m.children || m.children.length > 0)
-})
+/** 一个菜单都没有：说明这个角色没被授过任何权限，明确告诉用户，别让他对着空侧边栏猜 */
+const noMenuAtAll = computed(() => menuStore.loaded && menuStore.menus.length === 0)
 
 /** 面包屑：从当前路由的 matched 里取有 title 的层级 */
 const breadcrumbs = computed(() =>
@@ -98,6 +54,8 @@ async function handleLogout() {
   await auth.logout()
   // 切换账号后当前项目必然失效，必须清掉，否则新账号会带着上一个账号的项目 ID
   projectStore.reset()
+  // 菜单同理：不清的话新账号会短暂看到上一个账号的菜单
+  menuStore.reset()
   ElMessage.success('已安全退出')
   await router.replace('/login')
 }
@@ -144,6 +102,13 @@ onMounted(async () => {
   } catch {
     // 加载失败不阻断页面，选择器会显示「未分配项目」
   }
+
+  // 菜单：路由守卫通常已经拉过了，store 内部去重，这里只是兜底
+  try {
+    await menuStore.load()
+  } catch {
+    // 拉不到就显示空侧边栏，下面有时间提示用户
+  }
 })
 </script>
 
@@ -159,6 +124,15 @@ onMounted(async () => {
       </div>
 
       <el-scrollbar class="aside-scroll">
+        <!--
+          一个菜单都没有时明确说出来。
+          否则用户面对一个只剩品牌 logo 的侧边栏，只会以为系统坏了 ——
+          而真实原因是这个角色没被授过任何菜单权限。
+        -->
+        <div v-if="noMenuAtAll" class="aside-empty">
+          <template v-if="!collapsed">当前角色未分配任何菜单，请联系管理员</template>
+          <template v-else>无权限</template>
+        </div>
         <el-menu
           :default-active="activeMenu"
           :collapse="collapsed"
@@ -338,6 +312,17 @@ onMounted(async () => {
 .aside-scroll {
   flex: 1;
   min-height: 0;
+}
+
+.aside-empty {
+  margin: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgb(230 162 60 / 12%);
+  color: #e6a23c;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .aside-menu {

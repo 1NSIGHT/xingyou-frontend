@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   createRoleApi,
@@ -10,6 +10,12 @@ import {
   type RoleSaveParams,
   type RoleVO,
 } from '@/api/system/role'
+import {
+  getAllMenusApi,
+  getRoleMenusApi,
+  setRoleMenusApi,
+  type MenuNode,
+} from '@/api/system/menu'
 import type { DictOption } from '@/api/system/org'
 
 const loading = ref(false)
@@ -59,10 +65,108 @@ async function loadList() {
     const result = await getRolePageApi({ ...query })
     list.value = result.records
     total.value = result.total
+    void loadMenuCounts(result.records)
   } finally {
     loading.value = false
   }
 }
+
+// ─────────────────────────────── 菜单权限 ───────────────────────────────
+
+const menuDialogVisible = ref(false)
+const menuRole = ref<RoleVO | null>(null)
+const allMenus = ref<MenuNode[]>([])
+const menuTreeRef = ref<{ getCheckedKeys: (leafOnly?: boolean) => unknown[] }>()
+const menuSaving = ref(false)
+/** roleId → 已授权菜单数。用于在列表上直接看出"这个角色什么都没授" */
+const menuCounts = ref<Record<number, number>>({})
+
+/**
+ * 逐个角色拉菜单数。
+ *
+ * 后端没在 RoleVO 里带这个字段，所以这里是 N 次请求。角色数量是个位数
+ * （管理员配置项，不会多），可以接受。
+ *
+ * ★ 值得多这几条请求：菜单数为 0 的角色，成员登录后看到的是一个**空侧边栏**。
+ *   不在这里标出来，管理员根本不会发现 —— 他会以为用户"没登录成功"。
+ */
+async function loadMenuCounts(rows: RoleVO[]) {
+  const entries = await Promise.all(
+    rows.map(async (r) => {
+      try {
+        const keys = await getRoleMenusApi(r.id)
+        return [r.id, keys.length] as const
+      } catch {
+        // 拉不到就标记成"未知"，不要显示成 0 —— 那会误导管理员去修一个没坏的东西
+        return [r.id, -1] as const
+      }
+    }),
+  )
+  menuCounts.value = Object.fromEntries(entries)
+}
+
+async function openMenus(row: RoleVO) {
+  menuRole.value = row
+  menuDialogVisible.value = true
+  try {
+    if (!allMenus.value.length) {
+      allMenus.value = await getAllMenusApi()
+    }
+    checkedKeys.value = await getRoleMenusApi(row.id)
+  } catch (e) {
+    ElMessage.error('加载菜单权限失败：' + (e as Error).message)
+  }
+}
+
+const checkedKeys = ref<string[]>([])
+
+async function saveMenus() {
+  if (!menuRole.value) return
+  // leafOnly = true：只取叶子。
+  // 分组在树上是不可勾选的（下面 nodes 的 disabled），所以这里拿到的正好是可授权的那些
+  const keys = (menuTreeRef.value?.getCheckedKeys(true) ?? []) as string[]
+  menuSaving.value = true
+  try {
+    await setRoleMenusApi(menuRole.value.id, keys)
+    ElMessage.success('已保存。该角色在线的用户刷新页面后生效')
+    menuDialogVisible.value = false
+    await loadList()
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e as Error).message)
+  } finally {
+    menuSaving.value = false
+  }
+}
+
+/** 管理员隐含拥有全部菜单，界面上如实显示为全选且不可改 */
+const menuRoleIsAdmin = computed(() => menuRole.value?.code === 'ADMIN')
+
+interface MenuTreeNode {
+  key: string
+  label: string
+  disabled: boolean
+  children?: MenuTreeNode[]
+}
+
+/**
+ * el-tree 的数据。
+ *
+ * ★ 分组（grantable = false）**置灰不可勾选**。
+ *   这不是美观问题：如果允许勾分组，就会出现"我勾了分组、但子项一个都没勾，
+ *   于是什么也看不到"。让分组纯粹当容器，规则就只有一条 —— 看子项。
+ */
+const menuTreeData = computed<MenuTreeNode[]>(() =>
+  allMenus.value.map((n) => ({
+    key: n.key,
+    label: n.title,
+    disabled: !n.grantable,
+    children: n.children?.map((c) => ({
+      key: c.key,
+      label: c.title,
+      disabled: !c.grantable,
+    })),
+  })),
+)
 
 function handleSearch() {
   query.current = 1
@@ -215,6 +319,25 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
+        <el-table-column label="菜单" width="110" align="center">
+          <template #default="{ row }">
+            <!--
+              菜单数为 0 的角色，成员登录后看到的是一个空侧边栏。
+              这里必须显式标出来 —— 否则管理员会以为用户"没登录成功"，
+              而不会想到是权限没配。
+            -->
+            <el-tag v-if="menuCounts[row.id] === undefined" size="small" type="info">—</el-tag>
+            <el-tooltip
+              v-else-if="menuCounts[row.id] === 0"
+              content="该角色未分配任何菜单，成员登录后看不到任何功能入口"
+            >
+              <el-tag size="small" type="danger">未授权</el-tag>
+            </el-tooltip>
+            <el-tag v-else-if="menuCounts[row.id] === -1" size="small" type="info">未知</el-tag>
+            <el-tag v-else size="small" type="success">{{ menuCounts[row.id] }} 项</el-tag>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="sort" label="排序" width="80" align="center" />
 
         <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip>
@@ -223,8 +346,9 @@ onMounted(async () => {
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="140" align="center" fixed="right">
+        <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openMenus(row)">菜单权限</el-button>
             <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -268,7 +392,7 @@ onMounted(async () => {
             <el-option v-for="s in dataScopes" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
           <div class="field-tip">
-            决定该角色能看到哪些数据。功能权限（能做什么）将在后续版本接入。
+            决定该角色能看到哪些数据。左侧菜单能看到什么，在列表的「菜单权限」里配。
           </div>
         </el-form-item>
         <el-form-item label="排序">
@@ -284,10 +408,79 @@ onMounted(async () => {
         <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- ==================== 菜单权限 ==================== -->
+    <el-dialog
+      v-model="menuDialogVisible"
+      :title="`菜单权限 · ${menuRole?.name ?? ''}`"
+      width="460px"
+      destroy-on-close
+    >
+      <el-alert
+        v-if="menuRoleIsAdmin"
+        type="info"
+        :closable="false"
+        show-icon
+        title="系统管理员隐含拥有全部菜单"
+        description="这是刻意的：否则一次配错就能把管理员锁在系统外面，而那是唯一无法从界面上恢复的错误。"
+      />
+      <el-alert
+        v-else
+        type="warning"
+        :closable="false"
+        show-icon
+        title="一个都不勾 = 该角色登录后看不到任何菜单"
+        description="分组本身不可勾选，它只在下面有子项被勾选时才出现。"
+      />
+
+      <!--
+        destroy-on-close 是必需的：el-tree 的 default-checked-keys 只在初始化时生效，
+        不销毁的话第二次打开会沿用上一次的勾选状态 —— 看起来像"改了没保存"。
+      -->
+      <el-tree
+        ref="menuTreeRef"
+        class="menu-tree"
+        node-key="key"
+        show-checkbox
+        :data="menuTreeData"
+        :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
+        :default-checked-keys="checkedKeys"
+        :default-expand-all="true"
+      />
+
+      <el-alert
+        v-if="!menuRoleIsAdmin"
+        class="menu-hint"
+        type="info"
+        :closable="false"
+        title="平台配置（表单设计 / 流程设计）目前仍限系统管理员"
+        description="后端的发布接口对管理员限权。授给其他角色虽然能看到入口，但发布时会被拒绝 —— 与其给一个点了就失败的按钮，不如先说清楚。"
+      />
+
+      <template #footer>
+        <el-button @click="menuDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="menuSaving"
+          :disabled="menuRoleIsAdmin"
+          @click="saveMenus"
+        >
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped lang="scss">
+.menu-tree {
+  margin-top: 14px;
+}
+
+.menu-hint {
+  margin-top: 14px;
+}
+
 .card-head {
   display: flex;
   align-items: center;

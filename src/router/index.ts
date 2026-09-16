@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { useMenuStore } from '@/stores/menu'
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || '石油工程监理数字化平台'
 
@@ -19,7 +20,7 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'Home',
         component: () => import('@/views/home/index.vue'),
-        meta: { title: '工作台' },
+        meta: { title: '工作台', menuKey: 'home' },
       },
       {
         // 表单设计器 —— 低代码平台的**定义入口**。
@@ -31,13 +32,13 @@ const routes: RouteRecordRaw[] = [
             path: '',
             name: 'DesignerNew',
             component: () => import('@/views/meta/designer/index.vue'),
-            meta: { title: '新建表单', requiresAdmin: true },
+            meta: { title: '新建表单', menuKey: 'platform:form', requiresAdmin: true },
           },
           {
             path: ':formKey',
             name: 'DesignerEdit',
             component: () => import('@/views/meta/designer/index.vue'),
-            meta: { title: '编辑表单', requiresAdmin: true },
+            meta: { title: '编辑表单', menuKey: 'platform:form', requiresAdmin: true },
           },
         ],
       },      {
@@ -55,7 +56,7 @@ const routes: RouteRecordRaw[] = [
             path: 'apply',
             name: 'FlowApply',
             component: () => import('@/views/meta/flow/apply.vue'),
-            meta: { title: '提交申请' },
+            meta: { title: '提交申请', menuKey: 'flow:apply' },
           },
           {
             // 发布流程会做表单交叉校验，后端限系统管理员，
@@ -63,13 +64,13 @@ const routes: RouteRecordRaw[] = [
             path: 'design',
             name: 'FlowDesignerNew',
             component: () => import('@/views/meta/flow/designer.vue'),
-            meta: { title: '新建流程', requiresAdmin: true },
+            meta: { title: '新建流程', menuKey: 'platform:flow', requiresAdmin: true },
           },
           {
             path: 'design/:formKey',
             name: 'FlowDesignerEdit',
             component: () => import('@/views/meta/flow/designer.vue'),
-            meta: { title: '流程设计', requiresAdmin: true },
+            meta: { title: '流程设计', menuKey: 'platform:flow', requiresAdmin: true },
           },
         ],
       },      {
@@ -83,9 +84,14 @@ const routes: RouteRecordRaw[] = [
             path: '',
             name: 'DocumentList',
             component: () => import('@/views/meta/document/list.vue'),
-            meta: { title: '单据填报' },
+            meta: { title: '单据填报', menuKey: 'flow:document' },
           },
           {
+            // ★ 这个页面**刻意不挂 menuKey**。它是列表页点进来的详情页，
+            //   不是菜单项本身。挂了的话，"提交申请 → 发起"会跳到
+            //   /document/ncr，而那需要 flow:document ——
+            //   于是一个只有 flow:apply 的角色会被自己的权限拦在门外。
+            //   菜单权限只挂在"菜单项对应的那个路由"上。
             path: ':formKey',
             name: 'DocumentFill',
             component: () => import('@/views/meta/document/index.vue'),
@@ -163,6 +169,31 @@ router.beforeEach(async (to) => {
       ElMessage.warning('该功能仅系统管理员可用')
       return { path: '/' }
     }
+  }
+
+  // ── 菜单权限：拦住手敲 URL 的人 ──
+  //
+  // ★ 这是**界面层**的权限，不是安全边界。真正的门在后端的 @PreAuthorize。
+  //   它挡的是"用户从收藏夹/群里点了个链接，进去却到处吃 403"这种体验，
+  //   不是有意的攻击者。
+  const menuStore = useMenuStore()
+  if (!menuStore.loaded) {
+    try {
+      await menuStore.load()
+    } catch {
+      // 拉不到菜单时不放行任何菜单路由，但放行工作台 —— 否则用户会卡在死循环里
+    }
+  }
+  const menuKey = to.meta.menuKey as string | undefined
+  if (menuKey && !menuStore.has(menuKey)) {
+    // ★ 工作台是兜底落点，**必须无条件放行**。
+    //   如果连它也拦，下面的 return { path: '/' } 会和守卫自己形成死循环。
+    //   代价是"没有 home 权限的角色仍然停在 /"，这由侧边栏的空权限提示来兜。
+    if (to.path === '/') {
+      return true
+    }
+    ElMessage.warning('该功能未对你的角色开放')
+    return { path: '/' }
   }
 
   return true
