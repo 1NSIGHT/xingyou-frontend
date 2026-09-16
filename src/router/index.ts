@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
             meta: { title: '组织架构', requiresAdmin: true },
           },
           {
+            path: 'user',
+            name: 'SystemUser',
+            component: () => import('@/views/system/user/index.vue'),
+            meta: { title: '用户管理', requiresAdmin: true },
+          },
+          {
             path: 'role',
             name: 'SystemRole',
             component: () => import('@/views/system/role/index.vue'),

@@ -58,6 +58,9 @@ function handleCommand(command: string) {
     case 'system-org':
       void router.push('/system/org')
       break
+    case 'system-user':
+      void router.push('/system/user')
+      break
     case 'system-role':
       void router.push('/system/role')
       break
@@ -172,6 +175,10 @@ onMounted(async () => {
                   <el-dropdown-item command="system-org">
                     <el-icon><OfficeBuilding /></el-icon>
                     组织架构
+                  </el-dropdown-item>
+                  <el-dropdown-item command="system-user">
+                    <el-icon><User /></el-icon>
+                    用户管理
                   </el-dropdown-item>
                   <el-dropdown-item command="system-role">
                     <el-icon><UserFilled /></el-icon>
