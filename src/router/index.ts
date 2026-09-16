@@ -22,6 +22,21 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台' },
       },
       {
+        // 低代码填报页。★ 这个页面不认识任何具体业务 ——
+        // 它只是"取一份已发布的 schema，画出来，提交回去"，
+        // 因此后续每加一张表单都不需要新增路由。
+        path: 'document',
+        meta: { title: '单据填报' },
+        children: [
+          {
+            path: 'ncr',
+            name: 'NcrDocument',
+            component: () => import('@/views/meta/document/index.vue'),
+            meta: { title: '不符合项填报' },
+          },
+        ],
+      },
+      {
         // 无 component 的分组路由：面包屑走这一层，页面渲染到 AppLayout 的 router-view
         // 标记 requiresAdmin —— 入口在右上角头像菜单里，不在侧边栏
         path: 'system',
