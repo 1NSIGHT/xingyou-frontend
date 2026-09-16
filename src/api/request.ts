@@ -15,6 +15,14 @@ const CODE_UNAUTHORIZED = 401
 
 export const TOKEN_KEY = 'xy_access_token'
 
+/**
+ * 当前项目的 localStorage key。
+ *
+ * <p>定义在这里而不是 store 里，是为了让请求拦截器直接读取，
+ * 避免 request ← store ← api ← request 的循环依赖。
+ */
+export const PROJECT_KEY = 'xy_current_project'
+
 const service: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api',
   timeout: 20000,
@@ -26,6 +34,13 @@ service.interceptors.request.use(
     const token = localStorage.getItem(TOKEN_KEY)
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+
+    // 带上当前项目。后端每次都会校验该用户对这个项目确实有权限，
+    // 所以这里即便被篡改也不会造成越权——校验在后端而不是信任前端。
+    const projectId = localStorage.getItem(PROJECT_KEY)
+    if (projectId && config.headers) {
+      config.headers['X-Project-Id'] = projectId
     }
     return config
   },

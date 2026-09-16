@@ -3,11 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectStore } from '@/stores/project'
 import BrandLogo from '@/components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const projectStore = useProjectStore()
 
 const collapsed = ref(false)
 
@@ -46,8 +48,16 @@ async function handleLogout() {
     return
   }
   await auth.logout()
+  // 切换账号后当前项目必然失效，必须清掉，否则新账号会带着上一个账号的项目 ID
+  projectStore.reset()
   ElMessage.success('已安全退出')
   await router.replace('/login')
+}
+
+/** 切换当前项目 */
+function handleProjectChange(id: number) {
+  projectStore.setCurrent(id)
+  ElMessage.success(`已切换到「${projectStore.current?.name ?? ''}」`)
 }
 
 function handleCommand(command: string) {
@@ -78,6 +88,13 @@ onMounted(async () => {
     } catch {
       // 拉取失败不阻断页面，路由守卫还会再兜一层
     }
+  }
+
+  // 项目上下文：所有业务单据都要挂在项目下
+  try {
+    await projectStore.load()
+  } catch {
+    // 加载失败不阻断页面，选择器会显示「未分配项目」
   }
 })
 </script>
@@ -146,9 +163,29 @@ onMounted(async () => {
         </div>
 
         <div class="header-right">
-          <el-tag v-if="auth.userInfo?.projectName" type="info" effect="plain" size="small">
-            {{ auth.userInfo.projectName }}
-          </el-tag>
+          <!-- 当前项目：所有业务单据都挂在项目下，所以做成全局一等公民 -->
+          <div class="project-picker">
+            <el-icon class="picker-icon"><Folder /></el-icon>
+            <el-select
+              v-if="projectStore.hasProject"
+              :model-value="projectStore.currentId"
+              placeholder="选择项目"
+              class="project-select"
+              @change="handleProjectChange"
+            >
+              <el-option v-for="p in projectStore.projects" :key="p.id" :label="p.name" :value="p.id">
+                <span class="opt-name">{{ p.name }}</span>
+                <span class="opt-code">{{ p.code }}</span>
+              </el-option>
+            </el-select>
+            <el-tooltip
+              v-else
+              content="你还没有被分配到任何项目，请联系系统管理员"
+              placement="bottom"
+            >
+              <el-tag type="warning" effect="light">未分配项目</el-tag>
+            </el-tooltip>
+          </div>
 
           <el-dropdown @command="handleCommand">
             <span class="user-trigger">
@@ -401,6 +438,45 @@ onMounted(async () => {
   min-height: 0;
   overflow: auto;
   padding: 16px;
+}
+
+/* ==================== 项目选择器 ==================== */
+.project-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 14px;
+  border-right: 1px solid var(--xy-border);
+
+  .picker-icon {
+    font-size: 15px;
+    color: var(--xy-navy-500);
+  }
+
+  .project-select {
+    width: 240px;
+
+    :deep(.el-select__wrapper) {
+      box-shadow: none;
+      background: transparent;
+      font-size: 13.5px;
+
+      &:hover {
+        box-shadow: none;
+        background: var(--xy-fill-2);
+      }
+    }
+  }
+}
+
+.opt-name {
+  margin-right: 12px;
+}
+
+.opt-code {
+  float: right;
+  font-size: 12px;
+  color: var(--xy-text-3);
 }
 
 /* ==================== 头像下拉 ==================== */

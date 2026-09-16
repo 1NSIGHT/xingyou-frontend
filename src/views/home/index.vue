@@ -2,11 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectStore } from '@/stores/project'
 import { getOrgTreeApi, type OrgTreeNode } from '@/api/system/org'
 import { getRoleListApi } from '@/api/system/role'
 
 const router = useRouter()
 const auth = useAuthStore()
+const projectStore = useProjectStore()
 
 const orgTree = ref<OrgTreeNode[]>([])
 const roleCount = ref(0)
@@ -71,7 +73,7 @@ onMounted(async () => {
         <p class="hero-sub">
           <span>{{ auth.userInfo?.tenantName }}</span>
           <em>·</em>
-          <span>{{ auth.userInfo?.projectName || '暂未分配项目' }}</span>
+          <span>{{ projectStore.current?.name || '未分配项目' }}</span>
         </p>
       </div>
       <div class="hero-roles">
@@ -125,7 +127,7 @@ onMounted(async () => {
           <el-descriptions-item label="账号">{{ auth.userInfo?.username }}</el-descriptions-item>
           <el-descriptions-item label="所属单位">{{ auth.userInfo?.tenantName }}</el-descriptions-item>
           <el-descriptions-item label="当前项目">
-            {{ auth.userInfo?.projectName || '—' }}
+            {{ projectStore.current?.name || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="岗位角色">
             <el-tag
