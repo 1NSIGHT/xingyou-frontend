@@ -74,14 +74,14 @@ onMounted(async () => {
 })
 
 /** 加入一个字段。key 自动生成 —— 让用户手填 key 是最容易出错的一步 */
-function addField(type: (typeof FIELD_TYPES)[number]) {
+function insertField(type: (typeof FIELD_TYPES)[number], at: number) {
   const base = type.code.replace(/[A-Z]/g, (m) => m.toLowerCase())
   let index = fields.value.length + 1
   let key = `${base}${index}`
   const taken = new Set(fields.value.map((f) => f.key))
   while (taken.has(key)) key = `${base}${++index}`
 
-  fields.value.push({
+  const field = {
     key,
     label: { 'zh-CN': type.label },
     type: type.code,
@@ -91,8 +91,94 @@ function addField(type: (typeof FIELD_TYPES)[number]) {
       ? { dataSource: { kind: 'dict', dictCode: '' } as never }
       : {}),
     ...(type.multipleValueType ? { props: { multiple: false } } : {}),
-  })
-  selected.value = fields.value.length - 1
+  } as FieldDef
+
+  const list = [...fields.value]
+  list.splice(at < 0 || at > list.length ? list.length : at, 0, field)
+  fields.value = list
+  selected.value = list.indexOf(field)
+}
+
+function addField(type: (typeof FIELD_TYPES)[number]) {
+  insertField(type, fields.value.length)
+}
+
+// ---------------------------------------------------------------- 拖拽
+//
+// 用原生 HTML5 拖放，不引第三方库：需要的只有"从物料拖到画布"与
+// "画布内调序"两件事，原生事件足够，少一个依赖就少一处升级风险。
+//
+// 拖拽状态只有一个对象，两种来源：
+//   { kind: 'new',  type }  —— 从左侧物料面板拖入
+//   { kind: 'move', index } —— 在画布内拖动已有字段
+type DragPayload =
+  | { kind: 'new'; type: (typeof FIELD_TYPES)[number] }
+  | { kind: 'move'; index: number }
+
+const dragPayload = ref<DragPayload | null>(null)
+/** 手风琴展开的分组。默认全展开 —— 物料面板折叠起来对新手最不友好 */
+const openGroups = ref<string[]>(FIELD_CATEGORIES.map((g) => g.code))
+
+/** 落点位置，用于画插入指示线 —— 没有指示线的话用户不知道会插到哪 */
+const dropIndex = ref<number>(-1)
+
+function onDragStartNew(type: (typeof FIELD_TYPES)[number], e: Event) {
+  const dt = (e as DragEvent).dataTransfer
+  dragPayload.value = { kind: 'new', type }
+  // Firefox 必须 setData 才会真正开始拖拽
+  dt?.setData('text/plain', type.code)
+  if (dt) dt.effectAllowed = 'copy'
+}
+
+function onDragStartMove(index: number, e: Event) {
+  const dt = (e as DragEvent).dataTransfer
+  dragPayload.value = { kind: 'move', index }
+  dt?.setData('text/plain', String(index))
+  if (dt) dt.effectAllowed = 'move'
+  selected.value = index
+}
+
+/** 拖到某一行上方 → 插到它前面 */
+function onDragOverRow(index: number, e: Event) {
+  const dt = (e as DragEvent).dataTransfer
+  if (!dragPayload.value) return
+  e.preventDefault()
+  if (dt) dt.dropEffect = dragPayload.value.kind === 'new' ? 'copy' : 'move'
+  dropIndex.value = index
+}
+
+/** 拖到列表末尾的空白区 → 追加 */
+function onDragOverTail(e: Event) {
+  if (!dragPayload.value) return
+  e.preventDefault()
+  dropIndex.value = fields.value.length
+}
+
+function onDrop() {
+  const payload = dragPayload.value
+  const at = dropIndex.value
+  dragPayload.value = null
+  dropIndex.value = -1
+  if (!payload || at < 0) return
+
+  if (payload.kind === 'new') {
+    insertField(payload.type, at)
+    return
+  }
+
+  // 画布内调序：先摘出来，再按目标位插入。
+  // ★ 目标位在被摘元素之后时要减一，否则会差一位 ——
+  //   这类 bug 的表现是"往右拖一格却跑了两格"，很容易被误判成拖拽本身坏了。
+  const list = [...fields.value]
+  const [moved] = list.splice(payload.index, 1)
+  list.splice(at > payload.index ? at - 1 : at, 0, moved)
+  fields.value = list
+  selected.value = list.indexOf(moved)
+}
+
+function onDragEnd() {
+  dragPayload.value = null
+  dropIndex.value = -1
 }
 
 function move(index: number, delta: number) {
@@ -176,7 +262,7 @@ async function publish() {
     <!-- 左：物料面板。从 FIELD_TYPES 派生，加字段类型不用改这里 -->
     <el-card class="xy-pane xy-palette" shadow="never">
       <template #header>物料</template>
-      <el-collapse v-model="[]">
+      <el-collapse v-model="openGroups">
         <el-collapse-item
           v-for="group in materialsByCategory"
           :key="group.code"
@@ -188,7 +274,11 @@ async function publish() {
               v-for="mat in group.items"
               :key="mat.code"
               size="small"
+              class="xy-material"
+              draggable="true"
               @click="addField(mat)"
+              @dragstart="onDragStartNew(mat, $event)"
+              @dragend="onDragEnd"
             >
               {{ mat.label }}
             </el-button>
@@ -217,13 +307,22 @@ async function publish() {
       />
 
       <template v-else>
-        <el-empty v-if="fields.length === 0" description="从左侧点一个物料加入" />
+        <el-empty v-if="fields.length === 0" description="把左侧的物料拖到这里（也可以直接点击加入）" />
+
         <div
           v-for="(field, index) in fields"
           :key="field.key"
           class="xy-field-row"
-          :class="{ 'is-active': index === selected }"
+          :class="{
+            'is-active': index === selected,
+            'is-drop-target': dropIndex === index && dragPayload,
+          }"
+          draggable="true"
           @click="selected = index"
+          @dragstart="onDragStartMove(index, $event)"
+          @dragend="onDragEnd"
+          @dragover="onDragOverRow(index, $event)"
+          @drop.prevent="onDrop"
         >
           <span class="xy-field-key">{{ field.key }}</span>
           <span class="xy-field-label">
@@ -239,6 +338,18 @@ async function publish() {
             @click.stop="move(index, 1)"
           >↓</el-button>
           <el-button link type="danger" size="small" @click.stop="remove(index)">✕</el-button>
+        </div>
+        <div
+          class="xy-canvas-drop"
+          :class="{ 'is-drop-target': dropIndex === fields.length && dragPayload }"
+          @dragover="onDragOverTail"
+          @drop.prevent="onDrop"
+        >
+          <el-empty
+            v-if="fields.length === 0"
+            description="把左侧的物料拖到这里（也可以直接点击加入）"
+          />
+          <div v-else class="xy-canvas-tail">拖到此处追加到末尾</div>
         </div>
       </template>
     </el-card>
@@ -389,6 +500,18 @@ async function publish() {
 .xy-field-label {
   font-size: 13px;
 }
+.xy-material { cursor: grab; }
+.xy-material:active { cursor: grabbing; }
+.xy-canvas-drop { min-height: 60px; border-radius: 4px; }
+.xy-canvas-tail {
+  text-align: center;
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+  padding: 8px;
+  border: 1px dashed var(--el-border-color-lighter);
+  border-radius: 4px;
+}
+.is-drop-target { box-shadow: inset 0 2px 0 0 var(--el-color-primary); }
 .xy-spacer {
   flex: 1;
 }
