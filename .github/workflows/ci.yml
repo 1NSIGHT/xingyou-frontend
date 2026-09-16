@@ -1,0 +1,62 @@
+name: CI
+
+# 触发：推送到 main、以及对 main 的 PR
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: 类型检查与跨仓一致性
+    runs-on: ubuntu-latest
+    steps:
+      # ★ 必须同时签出两个仓库。
+      #
+      # 前端的两条护栏（check-field-types / check-condition）读的是后端仓库里的
+      # 权威文件：field-types.catalog.json 与 condition-vectors.json。
+      # 它们靠相对路径 ../xingyou-backend 定位，所以两个仓库要签出成**同级目录**。
+      #
+      # 这一条同时说明了护栏的意义：字段类型与条件语义**跨仓库共享一份契约**，
+      # 只改一边必然有一侧失败。CI 里把两边放在一起，这个失败才能被发现。
+      - name: 签出前端
+        uses: actions/checkout@v4
+        with:
+          path: xingyou-frontend
+
+      - name: 签出后端（护栏的权威文件在那边）
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/xingyou-backend
+          path: xingyou-backend
+          # 默认取后端默认分支的最新。这意味着前端 PR 是"对着后端 main"校验的 ——
+          # 如果配对的后端改动还没合并，这里会失败。
+          # 那是**正确的信号**（两处必须一起改），不是误报。
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: xingyou-frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: xingyou-frontend
+        run: npm ci
+
+      - name: 类型检查
+        working-directory: xingyou-frontend
+        run: npm run typecheck
+
+      - name: 字段类型清单一致性（对后端权威目录）
+        working-directory: xingyou-frontend
+        run: npm run check:types
+
+      - name: 条件求值语义一致性（对后端共享测试向量）
+        working-directory: xingyou-frontend
+        run: npm run check:condition
